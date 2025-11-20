@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from OsmoCaseStudy.models.material import Material
 from OsmoCaseStudy.models.fragrance_formula import FragranceFormula
+from OsmoCaseStudy.database import FragranceDatabase
 
 # Fixtures for example Materials
 @pytest.fixture(scope="module")
@@ -28,8 +29,12 @@ def jasmine():
 # Fixtures for example Fragrance Formulas
 @pytest.fixture(scope="module")
 def summer_breeze(bergamot_oil, lavender_absolute, sandalwood):
-    return FragranceFormula("Summer Breeze", [bergamot_oil, lavender_absolute, sandalwood])
+    return FragranceFormula("Summer Breeze", tuple([bergamot_oil, lavender_absolute, sandalwood]))
 
 @pytest.fixture(scope="module")
 def winter_breeze(bergamot_oil, amber, jasmine):
-    return FragranceFormula("Summer Breeze", [bergamot_oil, amber, jasmine])
+    return FragranceFormula("Winter Breeze", tuple([bergamot_oil, amber, jasmine]))
+
+@pytest.fixture(scope="module")
+def winter_breeze_dupe(bergamot_oil, amber, jasmine):
+    return FragranceFormula("Winter Wind", tuple([bergamot_oil, amber, jasmine]))

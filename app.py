@@ -1,13 +1,17 @@
 from flask import Flask, request, jsonify
+from werkzeug.exceptions import BadRequest, HTTPException
 from collections import deque
-from decimal import Decimal
 from OsmoCaseStudy.models.material import Material
 from OsmoCaseStudy.models.fragrance_formula import FragranceFormula
-from werkzeug.exceptions import BadRequest, HTTPException
+from OsmoCaseStudy.database import FragranceDatabase
+from OsmoCaseStudy.queue import FragranceQueue
 
 app = Flask(__name__)
 
-formula_queue = deque()
+q = FragranceQueue()
+#start_consumer(queue)
+db = FragranceDatabase()
+queue = deque()
 
 @app.route("/formulas", methods=["POST"])
 def submit_formula():
@@ -15,10 +19,18 @@ def submit_formula():
 
     fragrance_formulas = validate_request(data)
 
-    formula_queue.extend(fragrance_formulas)
-    return jsonify({"formula:": "formula", "status": "queued"}), 202
+    ##in a single step 
+    # - add formula to db
+    # - add to queue
+    try:
+        db.add_formulas(fragrance_formulas)
+        #q.publish_formula_created(fragrance_formulas) ## todo handle multiple
+        return jsonify({"message": f"Formula(s) added!"}), 200 ##todo improve message
+    except Exception as e:
+        db.remove_formulas(fragrance_formulas)
+        raise e
 
-def validate_request(data):
+def validate_request(data: dict):
     if not data:
         raise BadRequest("Invalid or missing JSON")
     
@@ -27,7 +39,7 @@ def validate_request(data):
     elif isinstance(data, dict):
         return [validate_formula(data)]
     
-def validate_formula(formula):
+def validate_formula(formula: dict):
     if "name" not in formula:
         raise BadRequest("Missing field 'name' on fragrance formula")
     if "materials" not in formula:
@@ -35,13 +47,17 @@ def validate_formula(formula):
     
     try:
         formula_materials = validate_materials(formula["materials"])
-        fragrance_formula = FragranceFormula(formula["name"], formula_materials)
+        ## Note: List to tuple conversion intentional in order to make formulas hashable 
+        fragrance_formula = FragranceFormula(formula["name"], tuple(formula_materials))
         return fragrance_formula
     except TypeError as e:
         ## Type errors are defined in model classes
         raise BadRequest("Invalid type in the request: " + str(e))
 
-def validate_materials(request_materials):
+def validate_materials(request_materials: list):
+    if not isinstance(request_materials, list):
+        raise BadRequest("A formula's materials must be a list")
+    
     for material in request_materials:
         if "name" not in material:
             raise BadRequest("Missing field 'name' on a material")

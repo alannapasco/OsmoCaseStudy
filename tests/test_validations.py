@@ -22,9 +22,8 @@ def test_submit_formula_valid(client, summer_breeze):
         json=payload
     )
 
-    assert response.status_code == 202
-    assert "status" in response.get_json() ## TODO define success response later
-
+    assert response.status_code == 200
+    assert "message" in response.get_json() ## TODO define success response later
 
 def test_submit_multiple_formulas_valid(client, summer_breeze, winter_breeze):
     payload = [summer_breeze.to_dict(), winter_breeze.to_dict()]
@@ -34,8 +33,8 @@ def test_submit_multiple_formulas_valid(client, summer_breeze, winter_breeze):
         json=payload
     )
 
-    assert response.status_code == 202
-    assert "status" in response.get_json() ## TODO define success response later
+    assert response.status_code == 200
+    assert "message" in response.get_json() ## TODO define success response later
 
 #### Invalid Request Object Type Tests
 
@@ -67,7 +66,7 @@ def test_submit_formula_invalid_materials(client):
 
     assert response.status_code == 400
     assert response.get_json()["error"] == "Bad Request"
-    assert "Missing field 'name' on a material" in response.get_json()["message"]
+    assert "A formula's materials must be a list" in response.get_json()["message"]
 
 def test_submit_formula_invalid_material_name(client):
     payload = {
