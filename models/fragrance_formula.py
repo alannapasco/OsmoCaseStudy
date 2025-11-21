@@ -33,5 +33,6 @@ class FragranceFormula:
         }
 
     def __str__(self):
-        return f"FragranceFormula(name={self.name!r}, formula={self.materials})"
+        materials_str = ", ".join(str(m) for m in self.materials)
+        return f"FragranceFormula(name={self.name!r}, formula={materials_str})"
     

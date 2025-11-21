@@ -1,5 +1,5 @@
 from werkzeug.exceptions import Conflict
-from OsmoCaseStudy.models.material import Material
+import pprint
 from OsmoCaseStudy.models.fragrance_formula import FragranceFormula
 
 class FragranceDatabase:
@@ -25,20 +25,31 @@ class FragranceDatabase:
             raise Conflict(f"This formula already exists in the database: {formula.materials}")
         
         self._db[id] = formula
+        return id
     
     def remove_formulas(self, formulas):
         if isinstance(formulas, list):
             for formula in formulas:
                 self.remove_formula(formula)
         elif isinstance(formulas, FragranceFormula):
-            self.remove_formula(formulas)
+            self.remove_formula(formulas) 
 
     def remove_formula(self, formula: FragranceFormula):
         id = hash(formula)
-        # instead of a KeyError, in the event an ID is not found return None
+        # Gracefully handle when an ID isn't present
+        # instead of a KeyError, just return None
         self._db.pop(id, None)
 
     def is_duplicate(self, id):
         return id in self._db
+    
+    def is_empty(self):
+        return len(self._db) == 0
+    
+    def size(self):
+        return len(self._db)
+    
+    def __str__(self):
+        pprint(self._db)
 
 

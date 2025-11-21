@@ -1,15 +1,18 @@
 import pytest
-from decimal import Decimal
-from OsmoCaseStudy.app import app
+from OsmoCaseStudy.app import FragranceServer
 from OsmoCaseStudy.models.material import Material
 from OsmoCaseStudy.models.fragrance_formula import FragranceFormula
 
 @pytest.fixture
-def client():
+def server():
+    return FragranceServer()
+
+@pytest.fixture
+def client(server):
     # Flask test client for simulating requests
     # This is the only testclass that will test using client simulator.
     # The rest will test assuming valid input. 
-    with app.test_client() as client:
+    with server.app.test_client() as client:
         yield client
 
 ### Valid Request Tests 
@@ -23,7 +26,8 @@ def test_submit_formula_valid(client, summer_breeze):
     )
 
     assert response.status_code == 200
-    assert "message" in response.get_json() ## TODO define success response later
+    assert "message" in response.get_json() 
+    assert "Formula(s) added!" in response.get_json()["message"]
 
 def test_submit_multiple_formulas_valid(client, summer_breeze, winter_breeze):
     payload = [summer_breeze.to_dict(), winter_breeze.to_dict()]
@@ -34,7 +38,8 @@ def test_submit_multiple_formulas_valid(client, summer_breeze, winter_breeze):
     )
 
     assert response.status_code == 200
-    assert "message" in response.get_json() ## TODO define success response later
+    assert "message" in response.get_json()
+    assert "Formula(s) added!" in response.get_json()["message"]
 
 #### Invalid Request Object Type Tests
 

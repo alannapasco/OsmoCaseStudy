@@ -32,6 +32,10 @@ def summer_breeze(bergamot_oil, lavender_absolute, sandalwood):
     return FragranceFormula("Summer Breeze", tuple([bergamot_oil, lavender_absolute, sandalwood]))
 
 @pytest.fixture(scope="module")
+def another_summer_breeze(jasmine):
+    return FragranceFormula("Summer Breeze", tuple([jasmine]))
+
+@pytest.fixture(scope="module")
 def winter_breeze(bergamot_oil, amber, jasmine):
     return FragranceFormula("Winter Breeze", tuple([bergamot_oil, amber, jasmine]))
 

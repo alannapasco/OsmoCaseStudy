@@ -18,6 +18,15 @@ class Material:
         else:
             self.concentration = concentration
     
+    def __eq__(self, other):
+        if not isinstance(other, Material):
+            return NotImplemented
+        ## compare value, not identity in memory
+        return (self.name, self.concentration) == (other.name, other.concentration)
+
+    def __hash__(self):
+        return hash((self.name, self.concentration))
+    
     def to_dict(self):
         return {
             "name": self.name,
