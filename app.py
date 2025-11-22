@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from werkzeug.exceptions import BadRequest, HTTPException
 from collections import deque
+from threading import Lock
 from OsmoCaseStudy.models.material import Material
 from OsmoCaseStudy.models.fragrance_formula import FragranceFormula
 from OsmoCaseStudy.database import FragranceDatabase
@@ -18,6 +19,9 @@ class FragranceServer:
         self.q = FormulaCreatedQueue()
         self.db = FragranceDatabase()
 
+        self.idempotency_cache = {} # Key: key from header, Value: the correct JSON response
+        self.idempotency_lock = Lock()
+
         self.register_routes() 
 
         # This is for neatly printing error messages to output
@@ -26,15 +30,38 @@ class FragranceServer:
     def register_routes(self):
         @self.app.route("/formulas", methods=["POST"])
         def submit_formula():
+
+            ## Handle idempotency 
+            idempotency_key = request.headers.get("Idempotency-Key")
+            if not idempotency_key:
+                raise BadRequest("Missing Idempotency-Key header")
+            with self.idempotency_lock:
+                if idempotency_key in self.idempotency_cache:
+                    # Return same response as original request
+                    response = self.idempotency_cache[idempotency_key]
+                    return self.parse_response(response)
+
             data = request.get_json()
             fragrance_formulas = self.validate_request(data)
 
-            ## In a single step:
-            # - add formula to db
-            # - add to queue
-            # rollback all if failure arises at any time
-            publish_with_retry(fragrance_formulas, self.db, self.q)
-            return jsonify({"message": f"Formula(s) added!"}), 200 
+            try:
+                response = publish_with_retry(fragrance_formulas, self.db, self.q)
+            except Exception as e:
+                response = e
+            
+            with self.idempotency_lock:
+                self.idempotency_cache[idempotency_key] = response
+
+            return self.parse_response(response)
+    
+    def parse_response(self, response):
+        # Response is either an Exception or None
+        # that is to be able to support both results from `publish_with_retry`
+        if response is None:
+            return jsonify({"message": f"Formula(s) added!"}), 200
+        else:
+            raise response
+
 
     def validate_request(self, data: dict):
         if not data:

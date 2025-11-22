@@ -1,4 +1,5 @@
 import pytest
+from werkzeug.exceptions import BadRequest
 from OsmoCaseStudy.app import FragranceServer
 from OsmoCaseStudy.models.material import Material
 from OsmoCaseStudy.models.fragrance_formula import FragranceFormula
@@ -22,19 +23,82 @@ def test_submit_formula_valid(client, summer_breeze):
 
     response = client.post(
         "/formulas",
-        json=payload
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
     )
 
     assert response.status_code == 200
     assert "message" in response.get_json() 
     assert "Formula(s) added!" in response.get_json()["message"]
 
+def test_submit_formula_no_idempotent_key(client, summer_breeze):
+    payload = summer_breeze.to_dict()
+
+    response = client.post(
+        "/formulas",
+        json=payload,
+    )
+
+    assert response.status_code == 400
+    assert "message" in response.get_json()
+    assert "Missing Idempotency-Key header" in response.get_json()["message"]    
+
+def test_submit_formula_no_idempotent_key(client, summer_breeze):
+    payload = summer_breeze.to_dict()
+
+    response = client.post(
+        "/formulas",
+        json=payload,
+    )
+
+    assert response.status_code == 400
+    assert "message" in response.get_json()
+    assert "Missing Idempotency-Key header" in response.get_json()["message"]  
+
+def test_submit_formula_idempotent_key_present(client, summer_breeze):
+    payload = summer_breeze.to_dict()
+
+    response = client.post(
+        "/formulas",
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
+    )
+    assert response.status_code == 200
+
+    response = client.post(
+        "/formulas",
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
+    )
+    assert response.status_code == 200 ## same result, no error
+
+def test_submit_formula_actual_duplicate(client, summer_breeze):
+    payload = summer_breeze.to_dict()
+
+    response = client.post(
+        "/formulas",
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
+    )
+    assert response.status_code == 200
+
+    response = client.post(
+        "/formulas",
+        json=payload,
+        headers={"Idempotency-Key": "test-abc"}
+    )
+    assert response.status_code == 409
+
+##############
+# Validation Tests
+##############
 def test_submit_multiple_formulas_valid(client, summer_breeze, winter_breeze):
     payload = [summer_breeze.to_dict(), winter_breeze.to_dict()]
 
     response = client.post(
         "/formulas",
-        json=payload
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
     )
 
     assert response.status_code == 200
@@ -51,7 +115,8 @@ def test_submit_formula_invalid_name(client, jasmine, bergamot_oil):
 
     response = client.post(
         "/formulas",
-        json=payload
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
     )
 
     assert response.status_code == 400
@@ -66,7 +131,8 @@ def test_submit_formula_invalid_materials(client):
 
     response = client.post(
         "/formulas",
-        json=payload
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
     )
 
     assert response.status_code == 400
@@ -81,7 +147,8 @@ def test_submit_formula_invalid_material_name(client):
 
     response = client.post(
         "/formulas",
-        json=payload
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
     )
 
     assert response.status_code == 400
@@ -96,7 +163,8 @@ def test_submit_formula_invalid_material_concentration(client):
 
     response = client.post(
         "/formulas",
-        json=payload
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
     )
 
     assert response.status_code == 400
@@ -110,7 +178,8 @@ def test_omit_info_formula(client, jasmine, bergamot_oil):
 
     response = client.post(
         "/formulas",
-        json=payload
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
     )
 
     assert response.status_code == 400
@@ -123,7 +192,8 @@ def test_omit_info_formula(client, jasmine, bergamot_oil):
 
     response = client.post(
         "/formulas",
-        json=payload
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
     )
 
     assert response.status_code == 400
@@ -138,7 +208,8 @@ def test_omit_info_materials(client, jasmine, bergamot_oil):
 
     response = client.post(
         "/formulas",
-        json=payload
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
     )
 
     assert response.status_code == 400
@@ -152,7 +223,8 @@ def test_omit_info_materials(client, jasmine, bergamot_oil):
 
     response = client.post(
         "/formulas",
-        json=payload
+        json=payload,
+        headers={"Idempotency-Key": "test-key-123"}
     )
 
     assert response.status_code == 400

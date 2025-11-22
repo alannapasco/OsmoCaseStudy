@@ -2,7 +2,6 @@ import pytest
 from unittest.mock import MagicMock, patch
 from OsmoCaseStudy.utils import publish_with_retry
 from OsmoCaseStudy.queue import FormulaCreatedQueue
-
 from OsmoCaseStudy.database import FragranceDatabase
 
 @patch("time.sleep", return_value=None) # patch time.sleep to save time while running test suite
