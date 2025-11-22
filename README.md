@@ -1,37 +1,80 @@
 # OsmoCaseStudy
-Welcome to the Fragrand Formula Processor
+Welcome to the Fragrance Formula Processor
 
 ## Setup
+Python Version: 3.11.7
 
+1. Clone the Repo
+```
+git clone https://github.com/your-username/osmo-case-study.git
+cd OsmoCaseStudy
+```
+
+2. Create and activate a virtual environment
+```
+python -m venv .venv
+source .venv/bin/activate
+```
+
+3. Install dependencies, set environment variables
+```
+pip install --upgrade pip
+pip install -r requirements.txt
+export FLASK_APP=OsmoCaseStudy.app:create_app
+export FLASK_ENV=development
+```
+
+4. Use Flask to run 
+```
+flask run
+```
+
+Now, open a second terminal and test sending requests:
+```
+curl -X POST http://127.0.0.1:5000/formulas \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 123e7-45345-4" \
+  -d '{"name": "Summer Breeze", "materials":[{"name":"Bergamot Oil","concentration":15.5},{"name":"Lavender Absolute","concentration":10.0}]}'
+```
+
+See Appendix for more example requests to copy/paste.
 
 
 ## Testing
 
 ### Unit Testing
-Tools: 
-- Pytest
-- unittest
+Test Framework: Pytest & unittest
+
+To run tests: 
+From within `/OsmoCaseStudy` run `pytest`
 
 There are a few significant test classes:
 - `test_atomicity.py` -> `test_queue.py`
+- `test_validations` -> first 4 tests test idempotency 
 - `test_database.py` (tests duplicate detection)
 
-The atomicity unit tests tests successful and unsuccessful retries by mocking the queue and db and ensuring that each call to the respective element was called the correct expected number of times. E.g if there is a failure on the first try and then success on the second, the rollback strategy section should only be called once.
+The atomicity unit tests tests successful and unsuccessful retries by mocking the queue and db and ensuring that each call to the respective element was called the correct expected number of times. E.g if there is a failure on the first try and then success on the second, the rollback strategy section should only be called once. Then, the `test_queue.py` tests that clean up took place in the event of an error. Specifically, the tests for `remove()`. 
 
-Then, the `test_queue.py` tests that clean up took place in the event of an error. Specifically, the tests for `remove()`. 
+Tests for idempotency are found in both the `test_validations` and `test_database.py` classes. 
+- `test_submit_formula_idempotent_key_success`: tests that 2 consecutive requests with the same idempotency key and formulas both return 200 success, and do NOT raise a `Conflict` error for the second duplicate request.
+- `test_submit_formula_valid_duplicate`: tests that 2 consecutive requests with different idempotency keys but the same formulas do correctly return a `Conflict` error on the second request. 
 
-The `test_database.py` tests also check for proper behavior when removing items from the database in the event of a failure. 
-
-But the class that brings it all together is `test_atomicity.py`.
 
 ### Calling the API locally
 See Appendix below for sample valid and invalid requests.
 
 
 ## Duplicate Detection Strategy  
-Formula uniqueness is defined by its material make-up, not by its name. That means formulas with the same name but different formulas are permitted, and we cannot use formula `name` as its unique identifier. 
 
-Initially I implemented the `materials` field on `FragranceFormula` as a list of `Material`. However, `list` in Python is not hashable, and I needed a way to extract a unique identifier from a list of materials where two separate lists of the same materials would return the same unique identifier. I converted the list of `Material` to a tuple of `Material` because tuples *are* hashable in Python. Finally, my database stores the hashed materials as Key and the full `FragranceFormula` object as Value. This achieves two things:
+I feel there are two interpretations of 'duplicate request':
+1. Two consecutive requests where the second one is sent accidentally (idempotency) - e.g. user clicks "submit" button twice really quickly but by accident. 
+    - Result: user should NOT see a "formula already exists" error
+2. Two consecutive requests where the second one is sent on purpose, but contains a formula that's already been added to the system. (equality checking/hashing)
+    - Result: user SHOULD see a "formula already exists" error
+
+To solve the first: I learned too late in the project that Flask's `POST` requests are the only non-idempotent requests within Flask, and therefore I needed to manually implament handling an idempotent key and further behavior. To solve idempotency I require an idempotency key to be passed in request headers, build a cache of said keys, and in subsequent calls check that the key is NOT present in the cache before processing the request. If it is, do not perform the process -- just return the same result as the first request.
+
+To solve the second: Formula uniqueness is defined by its material make-up, not by its name. That means formulas with the same name but different formulas are permitted, and we cannot use formula `name` as its unique identifier. Initially I implemented the `materials` field on `FragranceFormula` as a list of `Material`. However, `list` in Python is not hashable, and I needed a way to extract a unique identifier from a list of materials where two separate lists of the same materials would return the same unique identifier. I converted the list of `Material` to a tuple of `Material` because tuples *are* hashable in Python. Finally, my database stores the hashed materials as Key and the full `FragranceFormula` object as Value. This achieves two things:
 1. Two formulas with the same name but different formulas can both exist in the database and be treated as unique.
 2. Two formulas with different names (or same names) but the **same formula** are not allowed -- the second submission will face a Conflict error. 
 
