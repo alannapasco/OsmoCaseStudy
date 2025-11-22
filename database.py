@@ -22,7 +22,7 @@ class FragranceDatabase:
         id = hash(formula)
 
         if self.is_duplicate(id):
-            raise Conflict(f"This formula already exists in the database: {formula.materials}")
+            raise Conflict(f"This formula already exists in the database, either by the same name or another name: {formula}")
         
         self._db[id] = formula
         return id

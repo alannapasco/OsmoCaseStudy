@@ -4,7 +4,8 @@ from collections import deque
 from OsmoCaseStudy.models.material import Material
 from OsmoCaseStudy.models.fragrance_formula import FragranceFormula
 from OsmoCaseStudy.database import FragranceDatabase
-from OsmoCaseStudy.formula_created_queue import FormulaCreatedQueue
+from OsmoCaseStudy.queue import FormulaCreatedQueue
+
 from OsmoCaseStudy.utils import publish_with_retry
 
 
@@ -17,7 +18,6 @@ class FragranceServer:
         self.q = FormulaCreatedQueue()
         self.db = FragranceDatabase()
 
-        # At scale, routes would be in their own separate directory. Here we only have one, so keep it in this file. 
         self.register_routes() 
 
         # This is for neatly printing error messages to output
@@ -29,7 +29,7 @@ class FragranceServer:
             data = request.get_json()
             fragrance_formulas = self.validate_request(data)
 
-            ##in a single step:
+            ## In a single step:
             # - add formula to db
             # - add to queue
             # rollback all if failure arises at any time
