@@ -85,17 +85,14 @@ To solve the second: Formula uniqueness is defined by its material make-up, not 
     - low learning curve (first Python API for me)
     - high documentation/adtoption for online searching errors
 FastAPI and Django seemed like good choices because of how extensive their built-in features are, BUT for the purpose of this assignment I wanted to maintain manual control over things like serialization and validation, not offload that to a framework. FastAPI even has a feature that writes its own documentation - but I'm a skeptic and wouldn't trust a tool to do that. So I chose Flask in order to maintain control over the implementation. *However* in the real world I would likely select Django for its templates and ease of use with visual UIs. 
-4. **API accepts a list out of the box**: This was something I learned at AWS -> always think far into the future. While the assignment implied to accept one formula at a time, I implemented the API to accept either a list of formulas or a single formula so that as we hypothetically expand in the future to accept large-scale formula submissions we do not risk breaking backward compatibility. NOTE: This implementation is not savy because it was not a requirement of the case story - if the API encounters one dupe in the list then it stops and does not continue processing the rest. 
-5. **Database design**: Originally I approached the assignment by persisting formulas in a database-like structure wrapped around a Python dictionary and enforcing idempotency in that class. I later realized I could have handled idempotency directly in the queue class and did not need the database. However, in the real world we will have separate databases and queues, so I kept this implementation as-is, even if overkill for this assignment. 
+4. **API accepts a list out of the box**: *THIS MAY HAVE BUGS* This was something I learned at AWS -> always think far into the future. While the assignment implied to accept one formula at a time, I implemented the API to accept either a list of formulas or a single formula so that as we hypothetically expand in the future to accept large-scale formula submissions we do not risk breaking backward compatibility. NOTE: This implementation is not savy because it was not a requirement of the case story - if the API encounters one dupe in the list then it stops and does not continue processing the rest. 
+5. **Database design**: I approached the assignment by persisting formulas in a database-like structure wrapped around a Python dictionary and handling duplicates in that class. I later realized I could have handled duplicates directly in the queue class and did not need the database. However, in the real world we will have separate databases and queues, so I kept this implementation as-is, even if overkill for this assignment. 
 The wrapper class enables the following:
     - enables adding many formulas at once
     - handles calling `hash()` on the formulas before storing them
-    - gracefully handles removing items that don't exist
-    - gracefully handles attempting to add duplicate items, or formulas that already exist (even with a different name_)
-6. **Idempotency**: 
-    1. The message queue mostly relies on the database to ensure idempotency. This should be de-coupled in the real world. But for now, I wanted to distinctly handle idempotency separately from the message queue just as an organizational preference. All duplicate detection logic is in the db class and performed before storing an item, and also before enqueing an item. 
-    2. If a client accidentally submits a request twice (e.g. customer clicks "submit" twice very quickly) then the first time the request will go through correctly, then the second time the request will raise a Conflict error. 
-7. **Rollback Strategy**: In the event of a network drop or other error anywhere in the process of adding a formula, we must clean up every single container that holds information for this process. The rollback strategy includes retries with exponential backoff so that it waits slightly longer with each retry. That is because as we go through more retries, it becomes more clear that the issue may be more serious/need more time. The rollback strategy steps are:
+    - gracefully handles attempts to remove items that don't exist
+    - gracefully handles attempting to add duplicate items, or formulas that already exist (even with a different name) 
+6. **Rollback Strategy**: In the event of a network drop or other error anywhere in the process of adding a formula, we must clean up every single container that holds information for this process. The rollback strategy includes retries with exponential backoff so that it waits slightly longer with each retry. That is because as we go through more retries, it becomes more clear that the issue may be more serious/need more time. The rollback strategy steps are:
   - remove formula from storage/db
   - remove formula queue + downstream all three containers used within the queue to track info
   - define # of retries (default 3) 
@@ -106,8 +103,8 @@ The wrapper class enables the following:
 
 
 ## Production Considerations 
-1. **In-memory Queue vs Cloud Queue** - The assignment states to implement in-memory queue. For prod, we would use a much more scalable, flexible queue like SQS. This would ensure queue data is distributed across machines to be durable for customers.
-2. **Frameworks** - For a more scalable project, I would use Django over Flask in prod. Django comes with much more automation, templates, built-in auth, etc. 
+1. **In-memory Queue vs Cloud Queue** - The assignment states to implement in-memory queue. For prod, we would use a much more scalable, flexible queue like Amazon SQS. This would ensure queue data is distributed across machines to be durable for customers.
+2. **Frameworks** - For a more scalable project, I would use Django over Flask in prod. Django comes with much more automation, templates, built-in auth, and in general is heavier but better for scalability. 
 3. **Error Messages** - as a project scales, it's best practice to store error message text in a separate file and reference the messages. That way there is a single point of control for defining verbiage that might need to be used in multiple places, e.g. where the error is thrown and in its unit test. 
 4. **Error during rollback?** - What happens if you:
     1. Add item to db 
