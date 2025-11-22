@@ -6,7 +6,7 @@ Python Version: 3.11.7
 
 1. Clone the Repo
 ```
-git clone https://github.com/your-username/osmo-case-study.git
+git clone https://github.com/<your-username>/osmo-case-study.git
 cd OsmoCaseStudy
 ```
 
@@ -51,11 +51,12 @@ From within `/OsmoCaseStudy` run `pytest`
 There are a few significant test classes:
 - `test_atomicity.py` -> `test_queue.py`
 - `test_validations` -> first 4 tests test idempotency 
-- `test_database.py` (tests duplicate detection)
+- `test_database.py` -> tests duplicate detection
 
-The atomicity unit tests tests successful and unsuccessful retries by mocking the queue and db and ensuring that each call to the respective element was called the correct expected number of times. E.g if there is a failure on the first try and then success on the second, the rollback strategy section should only be called once. Then, the `test_queue.py` tests that clean up took place in the event of an error. Specifically, the tests for `remove()`. 
+The atomicity unit tests test successful and unsuccessful retries by mocking errors at different points of program flow and checking that the add/remove methods on the db and queue have been called the correct number of times. E.g if there is a failure on the first try and then success on the second, the rollback strategy section should only be called once. Then, the `test_queue.py`, specifically, the tests for `remove()`, tests that clean up took place in the event of an error. 
 
 Tests for idempotency are found in both the `test_validations` and `test_database.py` classes. 
+In `test_validations`:
 - `test_submit_formula_idempotent_key_success`: tests that 2 consecutive requests with the same idempotency key and formulas both return 200 success, and do NOT raise a `Conflict` error for the second duplicate request.
 - `test_submit_formula_valid_duplicate`: tests that 2 consecutive requests with different idempotency keys but the same formulas do correctly return a `Conflict` error on the second request. 
 
@@ -72,7 +73,7 @@ I feel there are two interpretations of 'duplicate request':
 2. Two consecutive requests where the second one is sent on purpose, but contains a formula that's already been added to the system. (equality checking/hashing)
     - Result: user SHOULD see a "formula already exists" error
 
-To solve the first: I learned too late in the project that Flask's `POST` requests are the only non-idempotent requests within Flask, and therefore I needed to manually implament handling an idempotent key and further behavior. To solve idempotency I require an idempotency key to be passed in request headers, build a cache of said keys, and in subsequent calls check that the key is NOT present in the cache before processing the request. If it is, do not perform the process -- just return the same result as the first request.
+To solve the first: I learned late in the project that Flask's `POST` requests are the only non-idempotent requests within Flask, and therefore I needed to manually implament handling an idempotent key and further behavior. To solve idempotency I require an idempotency key to be passed in request headers, build a cache of said keys, and in subsequent calls check that the key is NOT present in the cache before processing the request. If it is, do not perform the process -- just return the same result as the first request, which is found in the cache. 
 
 To solve the second: Formula uniqueness is defined by its material make-up, not by its name. That means formulas with the same name but different formulas are permitted, and we cannot use formula `name` as its unique identifier. Initially I implemented the `materials` field on `FragranceFormula` as a list of `Material`. However, `list` in Python is not hashable, and I needed a way to extract a unique identifier from a list of materials where two separate lists of the same materials would return the same unique identifier. I converted the list of `Material` to a tuple of `Material` because tuples *are* hashable in Python. Finally, my database stores the hashed materials as Key and the full `FragranceFormula` object as Value. This achieves two things:
 1. Two formulas with the same name but different formulas can both exist in the database and be treated as unique.
@@ -93,11 +94,11 @@ The wrapper class enables the following:
     - gracefully handles attempts to remove items that don't exist
     - gracefully handles attempting to add duplicate items, or formulas that already exist (even with a different name) 
 6. **Rollback Strategy**: In the event of a network drop or other error anywhere in the process of adding a formula, we must clean up every single container that holds information for this process. The rollback strategy includes retries with exponential backoff so that it waits slightly longer with each retry. That is because as we go through more retries, it becomes more clear that the issue may be more serious/need more time. The rollback strategy steps are:
-  - remove formula from storage/db
-  - remove formula queue + downstream all three containers used within the queue to track info
-  - define # of retries (default 3) 
-  - exponential backoff: define delay that grows with every retry (base delay is 1 second)
-  - retry all steps from the beginning the number of retries until a sure failure is detected - then fail 
+    - remove formula from storage/db
+    - remove formula queue + downstream all three containers used within the queue to track info
+    - define # of retries (default 3) 
+    - exponential backoff: define delay that grows with every retry (base delay is 1 second)
+    - retry all steps from the beginning the number of retries until a sure failure is detected - then fail 
 
 
 
@@ -117,7 +118,8 @@ The wrapper class enables the following:
 
 ## Appendix 
 
-### Valid Requests 
+### Valid Requests
+```
 curl -X POST http://127.0.0.1:5000/formulas \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: 123e7-45345-4" \
@@ -127,30 +129,28 @@ curl -X POST http://127.0.0.1:5000/formulas \
 -H "Content-Type: application/json" \
 -H "Idempotency-Key: 1234567890" \
 -d '{"name": "Winter Breeze", "materials":[{"name":"Bergamot Oil","concentration":15.5},{"name":"Sandalwood","concentration":5.0}]}'
-
-curl -X POST http://127.0.0.1:5000/formulas \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: 123e4567-e89b-12d3-a456-426614174000" \
-  -d '[  
-        {
-          "name": "Summer Breeze",
-          "materials": [
-            {"name":"Bergamot Oil","concentration":15.5},
-            {"name":"Lavender Absolute","concentration":10.0}
-          ]
-        },
-        {
-          "name": "Winter Breeze",
-          "materials": [
-            {"name":"Bergamot Oil","concentration":15.5},
-            {"name":"Sandalwood","concentration":5.0}
-          ]
-        }
-      ]'
+```
 
 
 ### Invalid Requests
 Missing idempotency key
+```
 curl -X POST http://127.0.0.1:5000/formulas \
   -H "Content-Type: application/json" \
   -d '{"name": "Summer Breeze", "materials":[{"name":"Bergamot Oil","concentration":15.5},{"name":"Lavender Absolute","concentration":10.0}]}'
+```
+
+The following two requests send consecutively will return a Conflict error (duplicate add to the database)
+```
+curl -X POST http://127.0.0.1:5000/formulas \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 123e7-45345-4" \
+  -d '{"name": "Summer Breeze", "materials":[{"name":"Bergamot Oil","concentration":15.5},{"name":"Lavender Absolute","concentration":10.0}]}'
+
+curl -X POST http://127.0.0.1:5000/formulas \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: abcdefg-abc" \
+  -d '{"name": "Summer Breeze", "materials":[{"name":"Bergamot Oil","concentration":15.5},{"name":"Lavender Absolute","concentration":10.0}]}'
+```
+
+  
