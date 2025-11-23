@@ -1,27 +1,32 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from OsmoCaseStudy.utils import publish_with_retry
+from OsmoCaseStudy.app import FragranceServer
 from OsmoCaseStudy.queue import FormulaCreatedQueue
 from OsmoCaseStudy.database import FragranceDatabase
 
+###########################################
+# Testing `publish_with_retry` from app.py
+###########################################
 @patch("time.sleep", return_value=None) # patch time.sleep to save time while running test suite
 def test_publish_success_first_try_size(summer_breeze, winter_breeze, another_summer_breeze):
+    server = FragranceServer()
     db = FragranceDatabase()
     q = FormulaCreatedQueue()
     formulas = [summer_breeze, winter_breeze, another_summer_breeze]
 
-    publish_with_retry(formulas, db, q)
+    server.publish_with_retry(formulas, db, q)
 
     assert db.size() == 3
     assert q.size() == 3
 
 @patch("time.sleep", return_value=None)
 def test_publish_success_first_try_calls(summer_breeze, winter_breeze, another_summer_breeze):
+    server = FragranceServer()
     db = MagicMock()
     q = MagicMock()
     formulas = [summer_breeze, winter_breeze, another_summer_breeze]
 
-    publish_with_retry(formulas, db, q)
+    server.publish_with_retry(formulas, db, q)
 
     db.add_formulas.assert_called_once_with(formulas)
     q.publish.assert_called_once_with(formulas)
@@ -31,17 +36,19 @@ def test_publish_success_first_try_calls(summer_breeze, winter_breeze, another_s
 
 @patch("time.sleep", return_value=None)
 def test_publish_success_first_try(summer_breeze, winter_breeze, another_summer_breeze):
+    server = FragranceServer()
     db = MagicMock()
     q = FormulaCreatedQueue()
     formulas = [summer_breeze, winter_breeze, another_summer_breeze]
 
     db.add_formulas.side_effect = [Exception("db fail"), None]
 
-    publish_with_retry(formulas, db, q)
+    server.publish_with_retry(formulas, db, q)
     assert q.size() == 3
 
 @patch("time.sleep", return_value=None)
 def test_publish_fails_once_then_succeeds(mock_sleep, summer_breeze, winter_breeze, another_summer_breeze):
+    server = FragranceServer()
     db = MagicMock()
     q = MagicMock()
     formulas = [summer_breeze, winter_breeze, another_summer_breeze]
@@ -49,7 +56,7 @@ def test_publish_fails_once_then_succeeds(mock_sleep, summer_breeze, winter_bree
     # First call fails, second call succeeds
     db.add_formulas.side_effect = [Exception("db fail"), None]
 
-    publish_with_retry(formulas, db, q)
+    server.publish_with_retry(formulas, db, q)
 
     # First attempt
     assert db.add_formulas.call_count == 2  # failed once, then succeeded
@@ -63,6 +70,7 @@ def test_publish_fails_once_then_succeeds(mock_sleep, summer_breeze, winter_bree
 
 @patch("time.sleep", return_value=None)
 def test_publish_all_retries_fail(mock_sleep, summer_breeze, winter_breeze, another_summer_breeze):
+    server = FragranceServer()
     db = MagicMock()
     q = MagicMock()
     formulas = [summer_breeze, winter_breeze, another_summer_breeze]
@@ -70,7 +78,7 @@ def test_publish_all_retries_fail(mock_sleep, summer_breeze, winter_breeze, anot
     db.add_formulas.side_effect = Exception("db fail")
 
     with pytest.raises(Exception):
-        publish_with_retry(formulas, db, q) #default is 3 attempts
+        server.publish_with_retry(formulas, db, q) #default is 3 attempts
 
     # 3 attempts ==> 3 add_formulas calls
     assert db.add_formulas.call_count == 3

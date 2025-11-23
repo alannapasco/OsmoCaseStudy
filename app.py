@@ -1,25 +1,24 @@
 from flask import Flask, request, jsonify
-from werkzeug.exceptions import BadRequest, HTTPException
-from collections import deque
+from werkzeug.exceptions import BadRequest, HTTPException, Conflict
 from threading import Lock
-from OsmoCaseStudy.models.material import Material
-from OsmoCaseStudy.models.fragrance_formula import FragranceFormula
+import time
 from OsmoCaseStudy.database import FragranceDatabase
 from OsmoCaseStudy.queue import FormulaCreatedQueue
-
-from OsmoCaseStudy.utils import publish_with_retry
-
+from OsmoCaseStudy.validations import validate_request
 
 class FragranceServer: 
     """
-    a REST API endpoint that accepts fragrance formula submissions and publishes them to a message queue
+    a REST API endpoint that:
+    - accepts fragrance formula submissions
+    - saves them to a database and
+    - publishes them to a message queue that could inform downstream services that a new formula has been added
     """
     def __init__(self):
         self.app = Flask(__name__)
-        self.q = FormulaCreatedQueue()
         self.db = FragranceDatabase()
+        self.q = FormulaCreatedQueue()
 
-        self.idempotency_cache = {} # Key: key from header, Value: the correct JSON response
+        self.idempotency_cache = {} # Key: key from header, Value: response from submit_formula
         self.idempotency_lock = Lock()
 
         self.register_routes() 
@@ -30,7 +29,7 @@ class FragranceServer:
     def register_routes(self):
         @self.app.route("/formulas", methods=["POST"])
         def submit_formula():
-
+            
             ## Handle idempotency 
             idempotency_key = request.headers.get("Idempotency-Key")
             if not idempotency_key:
@@ -41,11 +40,13 @@ class FragranceServer:
                     response = self.idempotency_cache[idempotency_key]
                     return self.parse_response(response)
 
+            ## Gather data from request
             data = request.get_json()
-            fragrance_formulas = self.validate_request(data)
+            fragrance_formulas = validate_request(data)
 
+            ## Process request
             try:
-                response = publish_with_retry(fragrance_formulas, self.db, self.q)
+                response = self.publish_with_retry(fragrance_formulas, self.db, self.q)
             except Exception as e:
                 response = e
             
@@ -53,58 +54,46 @@ class FragranceServer:
                 self.idempotency_cache[idempotency_key] = response
 
             return self.parse_response(response)
-    
+        
+    def publish_with_retry(self, formulas, db, queue, retries=3, base_delay=1.0, max_delay=10.0):
+        """
+        Attempts to 
+        - store one or many formulas to a database and
+        - publish the formula(s) to a messaging queue
+        and implements a rollback strategy with exponential backoff.
+        """
+        for attempt in range(retries):
+            try:
+                db.add_formulas(formulas)
+                queue.publish(formulas)
+                return None # represents success
+            except Conflict as e:
+                raise # duplicate formula entry to db - no need to rollback
+            except Exception as e:
+                # Rollback first:
+                db.remove_formulas(formulas)
+                queue.remove(formulas) 
+
+                if attempt == retries - 1:
+                    # when final attempt has failed
+                    raise
+
+                # Exponential backoff:
+                delay = min(base_delay * (2 ** attempt), max_delay) #formula for delay can be made more complex by adding "jitter" - a randomized small number to add to delay that changes every time we reach here so that the delay doesn't grow 'perfectly' exponentially but slightly differently each time it grows. 
+                time.sleep(delay)
+        
     def parse_response(self, response):
-        # Response is either an Exception or None
-        # that is to be able to support both results from `publish_with_retry`
+        """
+        Either returns a success JSON response or raises an Exception.
+        `response` is either:
+         - None: represents successful processing 
+         - an Exception: represents what went wrong during publishing
+        in order to support both results from `publish_with_retry()`
+        """
         if response is None:
             return jsonify({"message": f"Formula(s) added!"}), 200
         else:
             raise response
-
-
-    def validate_request(self, data: dict):
-        if not data:
-            raise BadRequest("Invalid or missing JSON")
-        
-        if isinstance(data, list):
-            return [self.validate_formula(formula) for formula in data]
-        elif isinstance(data, dict):
-            return self.validate_formula(data)
-        
-    def validate_formula(self, formula: dict):
-        if "name" not in formula:
-            raise BadRequest("Missing field 'name' on fragrance formula")
-        if "materials" not in formula:
-            raise BadRequest("Missing field 'materials' on fragrance formula")
-        
-        try:
-            formula_materials = self.validate_materials(formula["materials"])
-            ## Note: List to tuple conversion intentional in order to make formulas hashable 
-            fragrance_formula = FragranceFormula(formula["name"], tuple(formula_materials))
-            return fragrance_formula
-        except TypeError as e:
-            ## Type errors are defined in model classes
-            raise BadRequest("Invalid type in the request: " + str(e))
-
-    def validate_materials(self, request_materials: list):
-        if not isinstance(request_materials, list):
-            raise BadRequest("A formula's materials must be a list")
-        
-        for material in request_materials:
-            if "name" not in material:
-                raise BadRequest("Missing field 'name' on a material")
-            if "concentration" not in material:
-                raise BadRequest("Missing field 'concentration' on a material")
-        
-        formula_materials = [
-            Material(
-                name=material["name"],
-                concentration=material["concentration"]
-            )
-            for material in request_materials
-        ]
-        return formula_materials
 
     def handle_http_error(self, e):
         """

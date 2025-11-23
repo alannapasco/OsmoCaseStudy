@@ -1,8 +1,5 @@
 import pytest
-from werkzeug.exceptions import BadRequest
 from OsmoCaseStudy.app import FragranceServer
-from OsmoCaseStudy.models.material import Material
-from OsmoCaseStudy.models.fragrance_formula import FragranceFormula
 
 @pytest.fixture
 def server():
