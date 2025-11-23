@@ -20,7 +20,7 @@ class InProcessEvent:
 class FormulaCreatedQueue:
     def __init__(self, process_timeout=30):
         """
-        Initializes a queue for publishing an events when formulas are created.
+        Initializes a queue for publishing a events when formulas are created.
 
         This queue can be used to notify other components when a new formula has been added and requires further processing. Only the formula name and hashcode (id) are stored in the queue. The hashcode can be used to look up the formula in the db, and the name can be used for quick logging etc that should not require an entire lookup.
         """
@@ -84,6 +84,7 @@ class FormulaCreatedQueue:
         return len(self._formula_created_queue)
     
     def already_processed(self, formula):
+        # only used in unit tests eg assert already-published
         return hash(formula) in self._published_hashes
     
     def remove(self, formulas):
@@ -116,6 +117,8 @@ class FormulaCreatedQueue:
                 pass
 
     def remove_event_from_queue_by_id(self, id: int):
+        # the Deque built-in .remove() function already operates at O(n)
+        # therefore this could be made more efficient
         for event in self._formula_created_queue:
             if event.id == id:
                 self._formula_created_queue.remove(event)

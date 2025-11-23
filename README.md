@@ -96,6 +96,12 @@ In the event of a network drop or other error anywhere in the process of adding 
   
   ...I believe the rollback strategy in prod should consider this and perhaps implement what I believe is a dead letter queue, or basically a queue to track things to clean up by an additional async process, when network has resumed. 
 
+**Queue Design**
+Trade offs:
+1. **Python Queue vs Deque** - Originally I chose to represent the queue as a Python Queue but realized quickly that a Deque was more versatile. Example: `in get_next_item()` I chose to re-prioritize queue items that have been waiting beyond 30 seconds. That's only possible because Deques allow you to append to "left" aka add to the front/top priority of the queue, whereas Queue is more simple and only performs FIFO. 
+2. **remove_event_from_queue_by_id() function efficienty** - deque's .remove() functions at O(n) time, but since we only have `id` at the time of removal we need to search our queue at O(n) for the event with that id, and *then* call .reomove() on it, which then also functions at O(n). Overall it could be made more efficient, but since removal is not called during successful requests, I did not spend more time trying to make it more efficient. I would list it as a fast-follow in a real world scenario.
+- 
+
 ### Further design decisions not specifically requested but took note of: 
 1. **Float vs Decimal to represent `Concentration`**: Performing arithmatic on floating-point numbers is known to create unexpected results. There may come a time that this API will support modifying existing formulas by adding/subtracting to/from an element's concentration. E.g. "Add 0.1 to Jasmine". In the real world, I would ask a chemist/scientist how to handle this -- because truly I don't know if it makes sense to add/subtract from a concentration within a formula. But I chose the more precise representation. Float is better for representing numbers that are expected to be approximate, but we want precision. 
 2. **OOP vs Functional Programming**: As a Java developer I'm more comfortable with OOP, so you may notice this code base is structured a lot like a Java project, just in Python. 
