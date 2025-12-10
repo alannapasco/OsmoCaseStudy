@@ -9,7 +9,7 @@ class FragranceDatabase:
         where formulas are unique. Formula uniqueness is defined by its material make-up.
         Formulas with the same name but different formulas are permitted.
         """
-        self._db = {}
+        self._db = {} ## Key: id (hashed formula), Value: the formula
 
     def add_formulas(self, formulas):
         if isinstance(formulas, list):

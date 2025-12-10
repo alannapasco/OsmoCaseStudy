@@ -70,7 +70,7 @@ class FragranceServer:
             except Conflict as e:
                 raise # duplicate formula entry to db - no need to rollback
             except Exception as e:
-                # Rollback first:
+                # Rollback first: - to maintain atomicity
                 db.remove_formulas(formulas)
                 queue.remove(formulas) 
 
@@ -78,7 +78,7 @@ class FragranceServer:
                     # when final attempt has failed
                     raise
 
-                # Exponential backoff:
+                # Exponential backoff: - to not overload the server with instintaneous requests 
                 delay = min(base_delay * (2 ** attempt), max_delay) #formula for delay can be made more complex by adding "jitter" - a randomized small number to add to delay that changes every time we reach here so that the delay doesn't grow 'perfectly' exponentially but slightly differently each time it grows. 
                 time.sleep(delay)
         

@@ -49,7 +49,7 @@ class FormulaCreatedQueue:
         event = FormulaCreatedEvent(formula.name, id)
         with self._lock:
             self._formula_created_queue.append(event)
-            self._published_hashes.add(id)
+            self._published_hashes.add(id) ## this is simply to check for duplicates in the future - name could be improved
         return id
 
     def get_next_item(self):
@@ -103,7 +103,7 @@ class FormulaCreatedQueue:
             try:
                 self.remove_event_from_queue_by_id(id)
             except ValueError:
-                pass
+                pass ## Gracefully handle when the ID isn't present 
 
             try:
                 self._in_process.pop(id, None)

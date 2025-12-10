@@ -1,6 +1,36 @@
 # OsmoCaseStudy
 Welcome to the Fragrance Formula Processor
 
+```
+Code Review Agenda
+|
+|-- Data Definitions / Model / Schema
+|
+|-- Input Validation
+|
+|-- API Entry-point: submit_formula
+|    |
+|    |-- function: publish_with_retry
+|        |
+|        |-- database
+|        |     |
+|        |     |-- function: add_formula
+|        |     |
+|        |     |-- function: is_duplicate
+|        |
+|        |-- queue
+|        |     |
+|        |     |-- function: publish
+|        |     |
+|        |     |-- function: get_next_item
+|        |     |
+|        |     |-- function: ack
+|        |
+|        |-- rollback strategy (atomicity) - remove from db,queue
+|        |
+|    |-- idempotency handling
+```
+
 ## Setup
 Python Version: 3.11.7
 
